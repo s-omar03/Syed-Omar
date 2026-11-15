@@ -1,9 +1,7 @@
 # Steganography (C++20)
 
 LSB steganography for 24-bit BMP images: hides a `.txt`, `.c` or `.sh` file inside
-the pixel data of a bitmap and recovers it later. C++20 port of the original C
-project by Nestin Gregorios Sunny (Emertxe, 30.07.2025).
-
+the pixel data of a bitmap and recovers it later. 
 ## Build
 
 With CMake:
@@ -89,7 +87,7 @@ Bugs fixed along the way:
    length was wrong whenever bit 0 mattered.
 3. The decoder hardcoded `strcat(secret_fname, ".txt")`, ignoring the extension
    it had just decoded, so hiding a `.c` or `.sh` file came back as `.txt`.
-4. That same `strcat` wrote past a buffer allocated for exactly `"nestin"`.
+4. That same `strcat` wrote past a buffer allocated for exactly `"secret"`.
 5. Files were opened in text mode (`"r"` / `"w"`), which corrupts binary pixel
    data on Windows. All streams now use `std::ios::binary`.
 6. `check_capacity` computed the requirement with a stray extra `+ 4` and a

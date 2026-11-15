@@ -1,11 +1,4 @@
 /*
-Name : Nestin Gregorios Sunny
-
-Date : 30.07.2025
-
-Description :
-Project 2 - Implement Steganography using C programing
-
 Functions Demonstrated:
 1. Encoding a source file (beautiful.bmp) with secret file to stego file
 2. Decoded secret file from stego file 

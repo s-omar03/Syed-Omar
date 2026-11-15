@@ -1,9 +1,5 @@
 /*
  * Steganography — LSB encoder/decoder for 24-bit BMP images.
- *
- * Originally written in C by Nestin Gregorios Sunny (30.07.2025),
- * ported to C++20.
- *
  * Usage:
  *   ./stego -e <.bmp file> <.txt|.c|.sh file> [output .bmp]
  *   ./stego -d <.bmp file> [output name without extension]

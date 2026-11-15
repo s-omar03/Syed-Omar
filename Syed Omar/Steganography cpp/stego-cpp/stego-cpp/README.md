@@ -89,7 +89,7 @@ Bugs fixed along the way:
    length was wrong whenever bit 0 mattered.
 3. The decoder hardcoded `strcat(secret_fname, ".txt")`, ignoring the extension
    it had just decoded, so hiding a `.c` or `.sh` file came back as `.txt`.
-4. That same `strcat` wrote past a buffer allocated for exactly `"nestin"`.
+4. That same `strcat` wrote past a buffer allocated for exactly `"secret"`.
 5. Files were opened in text mode (`"r"` / `"w"`), which corrupts binary pixel
    data on Windows. All streams now use `std::ios::binary`.
 6. `check_capacity` computed the requirement with a stray extra `+ 4` and a

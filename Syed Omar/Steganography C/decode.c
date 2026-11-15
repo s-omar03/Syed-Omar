@@ -236,7 +236,6 @@ Status decode_secret_file_extn(DecodeInfo *decodeInfo)
     }
     extn[i] = '\0';
     
-    // Concatenate the extension with secret file (nestin.txt)
     //decodeInfo->secret_fname = realloc(decodeInfo->secret_fname, sizeof(extn) + 7);
     strcpy(decodeInfo->secret_fname, strcat(decodeInfo->secret_fname, ".txt"));
     
