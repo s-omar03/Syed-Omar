@@ -1,0 +1,13 @@
+#[0]	[apple]	3
+				file1.txt	4
+				file2.txt	2
+				file3.txt	2
+#[1]	[banana]	1
+				file1.txt	2
+#[2]	[cherry]	2
+				file1.txt	2
+				file2.txt	4
+#[3]	[date]	1
+				file2.txt	2
+#[4]	[elderberry]	1
+				file3.txt	2
