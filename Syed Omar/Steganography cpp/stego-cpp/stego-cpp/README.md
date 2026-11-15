@@ -2,7 +2,7 @@
 
 LSB steganography for 24-bit BMP images: hides a `.txt`, `.c` or `.sh` file inside
 the pixel data of a bitmap and recovers it later. C++20 port of the original C
-project by Nestin Gregorios Sunny (Emertxe, 30.07.2025).
+project.
 
 ## Build
 
