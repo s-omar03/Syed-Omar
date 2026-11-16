@@ -1,5 +1,35 @@
 #include "inverted_Search.h"
 
+/* Free every node of the file list and of the word database */
+static void free_everything(Flist *f_head, Wlist *head[])
+{
+    while (f_head != NULL)
+    {
+        Flist *next = f_head->link;
+        free(f_head);
+        f_head = next;
+    }
+
+    for (int i = 0; i < TABLE_SIZE; i++)
+    {
+        Wlist *w = head[i];
+        while (w != NULL)
+        {
+            Wlist *next_word = w->link;
+            Ltable *t = w->Tlink;
+            while (t != NULL)
+            {
+                Ltable *next_table = t->table_link;
+                free(t);
+                t = next_table;
+            }
+            free(w);
+            w = next_word;
+        }
+        head[i] = NULL;
+    }
+}
+
 int main(int argc, char *argv[])
 {
     system("clear");
@@ -36,7 +66,16 @@ int main(int argc, char *argv[])
         printf("5. Save Database\n");
         printf("6. Exit\n");
         printf("Enter a Choice: ");
-        scanf("%d", &choice);
+        if (scanf("%d", &choice) != 1)
+        {
+            /* Not a number (or end of input): discard the line, or stop at EOF */
+            int c;
+            while ((c = getchar()) != '\n' && c != EOF)
+                ;
+            if (c == EOF)
+                break;
+            choice = 0;
+        }
 
         switch (choice)
         {
@@ -74,5 +113,6 @@ int main(int argc, char *argv[])
         }
     } while (choice != 6);
 
+    free_everything(f_head, head);
     return 0;
 }

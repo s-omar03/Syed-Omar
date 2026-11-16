@@ -10,8 +10,11 @@ typedef struct _Edit
     FILE *fptr_mp3;
     FILE *fptr_temp;
     char frame_id[5];
-    char frame_id_value[100];
+    char frame_id_value[256];
     uint frame_id_size;
+    uint tag_end;       /* file offset where the ID3 tag ends            */
+    long size_delta;    /* how much the tag grew (+) or shrank (-)       */
+    int  replaced;      /* 1 once the requested frame has been written   */
 }Edit;
 
 Status read_and_validate_mp3_file_args(char *argv[], Edit *editInfo);
@@ -20,5 +23,7 @@ Status copy_data(Edit *editInfo, int version);
 Status copy_remaining_data(Edit *editInfo);
 uint get_frame_size(char *header, int version);
 void write_big_endian_uint(FILE *fp, uint value);
+void write_frame_size(FILE *fp, uint value, int version);
+void write_syncsafe_uint(FILE *fp, uint value);
 
 #endif

@@ -22,10 +22,17 @@ Sample Output:
 #include "types.h"
 #include "common.h"
 
+/* Extension of a file name including the dot, or "" if there is none */
+static const char *file_ext(const char *name)
+{
+    const char *dot = strrchr(name, '.');
+    return dot ? dot : "";
+}
+
 int main(int argc, char **argv)
 {
-    EncodeInfo encodeInfo;
-    DecodeInfo decodeInfo;
+    EncodeInfo encodeInfo = {0};
+    DecodeInfo decodeInfo = {0};
 
     if (argc < 2)
     {
@@ -45,7 +52,7 @@ int main(int argc, char **argv)
         
         if (argc < 4)
         {
-            if (strcmp(strchr(argv[2],'.'), ".bmp") == 0)
+            if (strcmp(file_ext(argv[2]), ".bmp") == 0)
             {
                 printf("%s: Encoding: %s %s %s <.txt file> [output file]\n", argv[0], argv[0], argv[1], argv[2]);   
             }
@@ -109,7 +116,14 @@ int main(int argc, char **argv)
             printf("INFO:  Read and Validate decode arguments done...\n");
 
             //start the encoding
-            if(do_decoding(&decodeInfo) == e_success)
+            Status decode_status = do_decoding(&decodeInfo);
+
+            /* Close the files and free the output name on every path */
+            if (decodeInfo.fptr_stego_image) fclose(decodeInfo.fptr_stego_image);
+            if (decodeInfo.fptr_secret) fclose(decodeInfo.fptr_secret);
+            free(decodeInfo.secret_fname);
+
+            if(decode_status == e_success)
             {
                 printf("INFO:  ## Decoding Done Successfully ##\n");
             }

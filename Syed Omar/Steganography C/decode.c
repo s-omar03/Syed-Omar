@@ -8,11 +8,18 @@
 #include "types.h"
 #include "common.h"
 
+/* Extension of a file name including the dot, or "" if there is none */
+static const char *file_ext(const char *name)
+{
+    const char *dot = strrchr(name, '.');
+    return dot ? dot : "";
+}
+
 /* Read and validate Decode args from argv */
 Status read_and_validate_decode_args(char *argv[], DecodeInfo *decodeInfo)
 {
     /* Check if argv[2] is .bmp file */
-    char *stego_ext =  strchr(argv[2], '.');
+    const char *stego_ext = file_ext(argv[2]);
     if(strcmp(stego_ext, ".bmp") == 0) 
     {    
         //Store the filename into structure
@@ -62,7 +69,7 @@ Status do_decoding(DecodeInfo *decodeInfo)
     if (open_image_file(decodeInfo) != e_success)
     {
         printf("ERROR:  Couldn't open stego image!!!\n");
-        e_failure;
+        return e_failure;
     }
     printf("INFO:  Opened %s\n", decodeInfo->stego_image_fname);
 
@@ -71,7 +78,7 @@ Status do_decoding(DecodeInfo *decodeInfo)
     if (skip_bmp_header(decodeInfo->fptr_stego_image) != e_success)
     {
         printf("ERROR:  Failed to skip header of Stego Image!!!\n");
-        e_failure;
+        return e_failure;
     }
     printf("INFO:  Done\n");
     
@@ -212,12 +219,12 @@ long decode_int_from_lsb(char *image_buffer)
 {
     // Logic to decode one byte 
     int i, j = 31, get;
-    int val = 0;
-    for (i = 0; i < 31; i++)
+    unsigned int val = 0;
+    for (i = 0; i < 32; i++)
     {
         // Get LSB bit of an element of image_buffer 
         get = (image_buffer[i] & 1);
-        val = val | (get << j);
+        val = val | ((unsigned int)get << j);
         j--;
     }
     return val;
@@ -227,28 +234,57 @@ long decode_int_from_lsb(char *image_buffer)
 Status decode_secret_file_extn(DecodeInfo *decodeInfo)
 {
     int i, size = decodeInfo->secret_file_extn_size;
-    char buffer[8], extn[size + 1];
+    char buffer[8], extn[16];
+
+    /* The extension is stored with its dot (".txt", ".c", ".sh") */
+    if (size < 0 || size > 7)
+    {
+        printf("ERROR:  Invalid secret file extension size (%d)!!!\n", size);
+        return e_failure;
+    }
     for (i = 0; i < size; i++)
     {
         //Read 8 bytes from stego
-        fread(buffer, 8, 1, decodeInfo->fptr_stego_image);
+        if (fread(buffer, 8, 1, decodeInfo->fptr_stego_image) != 1)
+        {
+            printf("ERROR:  Stego image ended unexpectedly!!!\n");
+            return e_failure;
+        }
         extn[i] = decode_byte_from_lsb(buffer);
     }
     extn[i] = '\0';
-    
-    //decodeInfo->secret_fname = realloc(decodeInfo->secret_fname, sizeof(extn) + 7);
-    strcpy(decodeInfo->secret_fname, strcat(decodeInfo->secret_fname, ".txt"));
-    
+
+    /* Images made by older versions stored no extension: use .txt for those */
+    if (size == 0)
+        strcpy(extn, ".txt");
+
+    /* Build "<name><extension>" in a buffer that is big enough for both */
+    char *full = malloc(strlen(decodeInfo->secret_fname) + strlen(extn) + 1);
+    if (full == NULL)
+    {
+        printf("ERROR:  Out of memory!!!\n");
+        return e_failure;
+    }
+    strcpy(full, decodeInfo->secret_fname);
+    strcat(full, extn);
+    free(decodeInfo->secret_fname);
+    decodeInfo->secret_fname = full;
+
     //open secret file in write mode
     decodeInfo->fptr_secret = fopen(decodeInfo->secret_fname, "w");
-    
+    if (decodeInfo->fptr_secret == NULL)
+    {
+        perror("fopen");
+        printf("ERROR:  Unable to create %s!!!\n", decodeInfo->secret_fname);
+        return e_failure;
+    }
+
     return e_success;
 }
 
 /* Decode secret file size */
 Status decode_secret_file_size(DecodeInfo *decodeInfo)
 {
-    int i;
     char buffer[32]; // 32 bytes, each holding 1 useful bit
 
     // Read 32 bytes from stego image

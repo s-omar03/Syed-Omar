@@ -49,17 +49,27 @@ Status read_and_validate_mp3_file_args (char* argv[], Edit *editInfo)
     }
 
     size_t value_len = strlen(argv[3]);
-    if (value_len + 1 > sizeof(editInfo->frame_id_value))
+    /* Payload layout: text frames = encoding byte + text.
+       Comment frames = encoding byte + language(3) + empty description + text. */
+    size_t prefix = (strcmp(editInfo->frame_id, "COMM") == 0) ? 5 : 1;
+    if (prefix + value_len > sizeof(editInfo->frame_id_value))
     {
-        printf("ERROR: Frame value too long\n");
+        printf("ERROR: Frame value too long (maximum %zu characters)\n",
+               sizeof(editInfo->frame_id_value) - prefix);
         return failure;
     }
 
-    editInfo->frame_id_value[0] = 0x00;
-    /* memcpy instead of strncpy: length is already known exactly, so
-       there is no need for strncpy's byte-by-byte length scan/padding. */
-    memcpy(editInfo->frame_id_value + 1, argv[3], value_len);
-    editInfo->frame_id_size = value_len + 1;
+    editInfo->frame_id_value[0] = 0x00;                 /* encoding: ISO-8859-1 */
+    if (prefix == 5)
+    {
+        memcpy(editInfo->frame_id_value + 1, "eng", 3);  /* language */
+        editInfo->frame_id_value[4] = 0x00;              /* empty description */
+    }
+    memcpy(editInfo->frame_id_value + prefix, argv[3], value_len);
+    editInfo->frame_id_size = (uint)(prefix + value_len);
+    editInfo->size_delta = 0;
+    editInfo->replaced = 0;
+    editInfo->tag_end = 0;
 
     /* Open the file once here and keep the handle open (rewound to the
        start) instead of opening it, closing it, and having edit_tag()
@@ -124,6 +134,29 @@ Status edit_tag (char* argv[], Edit *editInfo)
     printf("INFO:  ID3 header copied successfully\n");
 
     int id3_version = (unsigned char)header[3];
+    if (id3_version != 3 && id3_version != 4)
+    {
+        printf("ERROR: Only ID3v2.3 and ID3v2.4 are supported (found v2.%d)\n", id3_version);
+        fclose(editInfo->fptr_mp3);
+        fclose(editInfo->fptr_temp);
+        remove("temp.mp3");
+        return failure;
+    }
+    if (header[5] & 0x40)
+    {
+        printf("ERROR: Tags with an extended header are not supported\n");
+        fclose(editInfo->fptr_mp3);
+        fclose(editInfo->fptr_temp);
+        remove("temp.mp3");
+        return failure;
+    }
+    /* ID3v2.4 stores the year in TDRC; TYER only exists in v2.3 */
+    if (id3_version == 4 && strcmp(editInfo->frame_id, "TYER") == 0)
+        memcpy(editInfo->frame_id, "TDRC", 5);
+
+    uint tag_size = ((uint)(header[6] & 0x7F) << 21) | ((uint)(header[7] & 0x7F) << 14) |
+                    ((uint)(header[8] & 0x7F) << 7)  |  (uint)(header[9] & 0x7F);
+    editInfo->tag_end = 10 + tag_size;
 
     printf("INFO:  Scanning frames\n");
     if (copy_data(editInfo, id3_version) == failure || copy_remaining_data(editInfo) == failure)
@@ -134,10 +167,21 @@ Status edit_tag (char* argv[], Edit *editInfo)
         return failure;
     }
 
+    /* The tag size in the header must match the new frame sizes, otherwise
+       players read the start of the audio as part of the tag (or the reverse). */
+    if (editInfo->size_delta != 0)
+    {
+        long new_size = (long)tag_size + editInfo->size_delta;
+        fflush(editInfo->fptr_temp);
+        fseek(editInfo->fptr_temp, 6, SEEK_SET);
+        write_syncsafe_uint(editInfo->fptr_temp, (uint)new_size);
+    }
+
     fclose(editInfo->fptr_mp3);
     fclose(editInfo->fptr_temp);
 
-    if (remove(argv[4]) != 0 || rename("temp.mp3", argv[4]) != 0)
+    /* rename() replaces the original in one step, so a failure cannot lose it */
+    if (rename("temp.mp3", argv[4]) != 0)
     {
         printf("ERROR: Failed to replace original file\n");
         return failure;
@@ -151,7 +195,9 @@ Status copy_data (Edit *editInfo, int version)
     char frame_header[10];
     char buffer[COPY_BUFFER_SIZE];
 
-    while (fread(frame_header, 1, 10, editInfo->fptr_mp3) == 10)
+    /* Walk the frames, but never past the end of the ID3 tag */
+    while ((uint)ftell(editInfo->fptr_mp3) + 10 <= editInfo->tag_end &&
+           fread(frame_header, 1, 10, editInfo->fptr_mp3) == 10)
     {
         uint frame_size = get_frame_size(frame_header, version);
 
@@ -161,15 +207,9 @@ Status copy_data (Edit *editInfo, int version)
 
         if (frame_id[0] == '\0' || strspn(frame_id, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") < 4)
         {
-            printf("INFO:  Reached non-frame data or padding. Stopping frame scan.\n");
+            printf("INFO:  Reached padding. Stopping frame scan.\n");
             fseek(editInfo->fptr_mp3, -10, SEEK_CUR);
             break;
-        }
-
-        if (frame_size == 0)
-        {
-            printf("INFO:  Encountered zero-size frame. Skipping.\n");
-            continue;
         }
 
         if (frame_size > MAX_FRAME_SIZE)
@@ -178,25 +218,23 @@ Status copy_data (Edit *editInfo, int version)
             return failure;
         }
 
-        if (strcmp(frame_id, editInfo->frame_id) == 0)
+        if (!editInfo->replaced && strcmp(frame_id, editInfo->frame_id) == 0)
         {
             printf("INFO:  Replacing frame %s\n", frame_id);
             fwrite(editInfo->frame_id, 1, 4, editInfo->fptr_temp);
-
-            write_big_endian_uint(editInfo->fptr_temp, editInfo->frame_id_size);
-
+            write_frame_size(editInfo->fptr_temp, editInfo->frame_id_size, version);
             fwrite("\0\0", 1, 2, editInfo->fptr_temp);
             fwrite(editInfo->frame_id_value, 1, editInfo->frame_id_size, editInfo->fptr_temp);
 
+            editInfo->size_delta += (long)editInfo->frame_id_size - (long)frame_size;
+            editInfo->replaced = 1;
             fseek(editInfo->fptr_mp3, frame_size, SEEK_CUR);
         }
         else
         {
             fwrite(frame_header, 1, 10, editInfo->fptr_temp);
 
-            /* Copy this frame's payload in fixed-size chunks through a
-               stack buffer instead of malloc()/free()'ing a
-               frame_size-sized heap buffer for every single frame. */
+            /* Copy the payload in fixed-size chunks through a stack buffer */
             uint remaining = frame_size;
             while (remaining > 0)
             {
@@ -210,6 +248,18 @@ Status copy_data (Edit *editInfo, int version)
                 remaining -= (uint)got;
             }
         }
+    }
+
+    /* The frame was not in the file: add it after the last frame */
+    if (!editInfo->replaced)
+    {
+        printf("INFO:  Frame %s not present. Adding it.\n", editInfo->frame_id);
+        fwrite(editInfo->frame_id, 1, 4, editInfo->fptr_temp);
+        write_frame_size(editInfo->fptr_temp, editInfo->frame_id_size, version);
+        fwrite("\0\0", 1, 2, editInfo->fptr_temp);
+        fwrite(editInfo->frame_id_value, 1, editInfo->frame_id_size, editInfo->fptr_temp);
+        editInfo->size_delta += 10 + (long)editInfo->frame_id_size;
+        editInfo->replaced = 1;
     }
 
     return success;
@@ -258,4 +308,21 @@ void write_big_endian_uint(FILE *fp, uint value)
     fputc((value >> 16) & 0xFF, fp);
     fputc((value >> 8) & 0xFF, fp);
     fputc(value & 0xFF, fp);
+}
+
+/* ID3v2.4 frame sizes are "syncsafe" (7 bits per byte); v2.3 uses plain big-endian */
+void write_frame_size(FILE *fp, uint value, int version)
+{
+    if (version == 4)
+        write_syncsafe_uint(fp, value);
+    else
+        write_big_endian_uint(fp, value);
+}
+
+void write_syncsafe_uint(FILE *fp, uint value)
+{
+    fputc((value >> 21) & 0x7F, fp);
+    fputc((value >> 14) & 0x7F, fp);
+    fputc((value >> 7) & 0x7F, fp);
+    fputc(value & 0x7F, fp);
 }

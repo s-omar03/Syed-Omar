@@ -25,7 +25,9 @@ test: $(TARGET)
 	./$(TARGET) -10 '*' -5
 	@echo "--- Division ---"
 	./$(TARGET) 100 / 5
-	./$(TARGET) 10 / 0
+	./$(TARGET) 123456789123456789123456789 / 987654321
+	@echo "--- Division by zero (reports an error and exits non-zero, which is expected) ---"
+	-./$(TARGET) 10 / 0
 
 clean:
 	rm -f $(OBJS) $(TARGET)

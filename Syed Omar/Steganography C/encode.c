@@ -19,6 +19,13 @@ Sample Output:
 #include "types.h"
 #include "common.h"
 
+/* Extension of a file name including the dot, or "" if there is none */
+static const char *file_ext(const char *name)
+{
+    const char *dot = strrchr(name, '.');
+    return dot ? dot : "";
+}
+
 /* Function Definitions */
 
 /* Check operation type */
@@ -43,7 +50,7 @@ OperationType check_operation_type(char *argv[])
 Status read_and_validate_encode_args(char *argv[], EncodeInfo *encodeInfo)
 {
     /* Check if argv[2] is .bmp file */
-    char *src_ext =  strchr(argv[2], '.');
+    const char *src_ext = file_ext(argv[2]);
     if(strcmp(src_ext, ".bmp") == 0) 
     {    
         //Store the filename into structure
@@ -57,11 +64,13 @@ Status read_and_validate_encode_args(char *argv[], EncodeInfo *encodeInfo)
     }
     
     /* Check if argv[3] is .txt or .c or .sh file */
-    char *secret_ext =  strchr(argv[3], '.');
+    const char *secret_ext = file_ext(argv[3]);
     if((strcmp(secret_ext, ".txt") == 0) || (strcmp(secret_ext, ".c") == 0) || (strcmp(secret_ext, ".sh") == 0)) 
     {
-        //Store the filename into structure
+        //Store the filename and its extension (kept inside the image for decoding)
         encodeInfo -> secret_fname = argv[3];
+        strncpy(encodeInfo->extn_secret_file, secret_ext, MAX_FILE_SUFFIX - 1);
+        encodeInfo->extn_secret_file[MAX_FILE_SUFFIX - 1] = '\0';
     }
     else
     {
@@ -80,7 +89,7 @@ Status read_and_validate_encode_args(char *argv[], EncodeInfo *encodeInfo)
     else
     {
         /* Check if argv[4] is .bmp file */
-        char *stego_ext =  strchr(argv[4], '.'); 
+        const char *stego_ext = file_ext(argv[4]);
         if(strcmp(stego_ext, ".bmp") == 0)  
         {    
             //Store the filename into structure
